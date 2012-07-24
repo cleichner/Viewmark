@@ -8,12 +8,13 @@ import tornado.ioloop
 import tornado.web
 
 from string import Template
+from threading import Lock
 from tornado import websocket
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 # TODO favicon, static css serving, parsing command line args, packaging,
-# good variable names
+# good variable names, actual logging
 
 page = Template(
 '''<!DOCTYPE html>
@@ -36,27 +37,24 @@ $body
 target = 'hello.md'
 target_path = '/Users/chas/code/python/viewmark'
 
+# probably not any major risks of not using a lock, but this is multithreaded
+# and liddle hacks have a way of getting out of control.
+sockets_lock = Lock()
 sockets = set()
 
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
         with file(target) as f:
-            self.write(
-                page.substitute(
-                    body = misaka.html(
-                        f.read()
-                    )
-                )
-            )
+            self.write(page.substitute(body = misaka.html(f.read())))
 
 class ClientSocket(websocket.WebSocketHandler):
     def open(self):
-        sockets.add(self)
-        print "WebSocket opened"
+        with sockets_lock:
+            sockets.add(self)
 
     def on_close(self):
-        sockets.remove(self)
-        print "WebSocket closed"
+        with sockets_lock:
+            sockets.remove(self)
 
 class MyEventHandler(FileSystemEventHandler):
     def on_modified(self, event):
@@ -65,23 +63,25 @@ class MyEventHandler(FileSystemEventHandler):
             with file(target) as f:
                 html = misaka.html(f.read())
                 for socket in sockets:
-                    socket.write_message(html)
+                    with sockets_lock:
+                        socket.write_message(html)
 
-event_handler = MyEventHandler()
-observer = Observer()
-observer.schedule(event_handler, target_path, recursive=True)
-observer.start()
+if __name__ == '__main__':
+    event_handler = MyEventHandler()
+    observer = Observer()
+    observer.schedule(event_handler, target_path, recursive=True)
+    observer.start()
 
-application = tornado.web.Application([
-    (r"/", MainHandler),
-    (r"/socket", ClientSocket),
-])
+    application = tornado.web.Application([
+        (r"/", MainHandler),
+        (r"/socket", ClientSocket),
+    ])
 
-try:
-    application.listen(8888)
-    tornado.ioloop.IOLoop.instance().start()
-except KeyboardInterrupt:
-    observer.stop()
+    try:
+        application.listen(8888)
+        tornado.ioloop.IOLoop.instance().start()
+    except KeyboardInterrupt:
+        observer.stop()
 
-observer.join()
+    observer.join()
 
