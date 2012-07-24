@@ -38,7 +38,7 @@ target = 'hello.md'
 target_path = '/Users/chas/code/python/viewmark'
 
 # probably not any major risks of not using a lock, but this is multithreaded
-# and liddle hacks have a way of getting out of control.
+# and little hacks have a way of getting out of control.
 sockets_lock = Lock()
 sockets = set()
 
