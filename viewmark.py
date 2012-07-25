@@ -20,30 +20,6 @@ from watchdog.observers import Observer
 # packaging,
 # actual logging
 
-class RequestHandler(tornado.web.RequestHandler):
-    def get(self):
-        with file(target) as f:
-            self.write(page.substitute(body=misaka.html(f.read())))
-
-class SocketHandler(websocket.WebSocketHandler):
-    def open(self):
-        with sockets_lock:
-            sockets.add(self)
-
-    def on_close(self):
-        with sockets_lock:
-            sockets.remove(self)
-
-class DirectoryChangeHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        if all([event.is_directory, event.event_type == 'modified',
-           event.src_path == target_path]):
-            with file(target) as f:
-                html = misaka.html(f.read())
-                with sockets_lock:
-                    for socket in sockets:
-                        socket.write_message(html)
-
 page = Template(
 '''<!DOCTYPE html>
 <html>
@@ -71,6 +47,30 @@ target_path, target = os.path.split(os.path.abspath(args.file))
 # and little hacks have a way of getting out of control.
 sockets_lock = Lock()
 sockets = set()
+
+class RequestHandler(tornado.web.RequestHandler):
+    def get(self):
+        with file(target) as f:
+            self.write(page.substitute(body=misaka.html(f.read())))
+
+class SocketHandler(websocket.WebSocketHandler):
+    def open(self):
+        with sockets_lock:
+            sockets.add(self)
+
+    def on_close(self):
+        with sockets_lock:
+            sockets.remove(self)
+
+class DirectoryChangeHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if all([event.is_directory, event.event_type == 'modified',
+           event.src_path == target_path]):
+            with file(target) as f:
+                html = misaka.html(f.read())
+                with sockets_lock:
+                    for socket in sockets:
+                        socket.write_message(html)
 
 observer = Observer()
 observer.schedule(DirectoryChangeHandler(), target_path, recursive=True)
