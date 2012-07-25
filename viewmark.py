@@ -41,7 +41,8 @@ $body
 parser = argparse.ArgumentParser(description='Display Markdown as you edit')
 parser.add_argument('file', type=str, help='The file to watch')
 args = parser.parse_args()
-target_path, target = os.path.split(os.path.abspath(args.file))
+target = os.path.abspath(args.file)
+target_path = os.path.dirname(target)
 
 # probably not any major risks of not using a lock, but this is multithreaded
 # and little hacks have a way of getting out of control.
